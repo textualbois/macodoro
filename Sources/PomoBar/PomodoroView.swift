@@ -9,13 +9,6 @@ struct PomodoroView: View {
     @State private var editingActivityDraft: DailyActivityDraft?
     @State private var newActivityTitle = ""
 
-    private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .full
-        formatter.timeStyle = .medium
-        return formatter
-    }()
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -34,13 +27,13 @@ struct PomodoroView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(dateFormatter.string(from: store.currentTime))
+            Text(headerDateString)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
             HStack(alignment: .lastTextBaseline) {
-                Text(store.phase.title)
+                Text(phaseTitle)
                     .font(.system(size: 28, weight: .bold))
                 Spacer()
                 Text(timerText(seconds: store.secondsRemaining))
@@ -58,7 +51,7 @@ struct PomodoroView: View {
                 Button {
                     store.toggleRunning()
                 } label: {
-                    Label(store.isRunning ? "Pause" : "Start", systemImage: store.isRunning ? "pause.fill" : "play.fill")
+                    Label(store.isRunning ? loc("timer.pause") : loc("timer.start"), systemImage: store.isRunning ? "pause.fill" : "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .keyboardShortcut(.space, modifiers: [])
@@ -67,13 +60,13 @@ struct PomodoroView: View {
                 Button {
                     store.reset()
                 } label: {
-                    Label("Reset", systemImage: "arrow.counterclockwise")
+                    Label(loc("timer.reset"), systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(.bordered)
 
                 Menu {
                     if trackMenuApps.isEmpty {
-                        Text("No apps available")
+                        Text(loc("track.noApps"))
                     } else {
                         ForEach(trackMenuApps) { app in
                             if let trackedApp = trackedApp(matching: app) {
@@ -81,7 +74,7 @@ struct PomodoroView: View {
                                     Button {
                                         store.toggleTrackedApp(trackedApp)
                                     } label: {
-                                        Label("Stop Tracking", systemImage: "xmark")
+                                        Label(loc("track.stop"), systemImage: "xmark")
                                     }
 
                                     Divider()
@@ -109,7 +102,7 @@ struct PomodoroView: View {
                         }
                     }
                 } label: {
-                    Label("Track", systemImage: "scope")
+                    Label(loc("timer.track"), systemImage: "scope")
                 }
                 .menuIndicator(.hidden)
                 .menuStyle(.button)
@@ -118,7 +111,7 @@ struct PomodoroView: View {
                 Button {
                     store.skip()
                 } label: {
-                    Label("Skip", systemImage: "forward.fill")
+                    Label(loc("timer.skip"), systemImage: "forward.fill")
                 }
                 .buttonStyle(.bordered)
 
@@ -128,12 +121,12 @@ struct PomodoroView: View {
 
     private var settings: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Intervals")
+            Text(loc("settings.intervals"))
                 .font(.headline)
 
             Stepper(value: focusBinding, in: 1...180) {
                 HStack {
-                    Label("Focus", systemImage: "timer")
+                    Label(loc("settings.focus"), systemImage: "timer")
                     Spacer()
                     Text(timeSummary(minutes: store.state.settings.focusMinutes))
                         .foregroundStyle(.secondary)
@@ -143,7 +136,7 @@ struct PomodoroView: View {
 
             Stepper(value: breakBinding, in: 0...60) {
                 HStack {
-                    Label("Break", systemImage: "cup.and.saucer.fill")
+                    Label(loc("settings.break"), systemImage: "cup.and.saucer.fill")
                     Spacer()
                     Text(breakLabel)
                         .foregroundStyle(.secondary)
@@ -156,29 +149,29 @@ struct PomodoroView: View {
     private var history: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Performance")
+                Text(loc("performance.title"))
                     .font(.headline)
                 Spacer()
-                Text("Streak \(store.currentStreakDays)d")
+                Text(store.localized("performance.streak", store.currentStreakDays))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.orange)
             }
 
             HStack(spacing: 14) {
-                stat(title: "Today", value: "\(store.todaysCompletedSessions)", detail: "sessions")
-                stat(title: "Focus", value: timeSummary(minutes: store.todaysFocusedMinutes))
-                stat(title: "Tracked", value: timeSummary(seconds: store.todaysActiveSeconds))
+                stat(title: loc("performance.today"), value: "\(store.todaysCompletedSessions)", detail: loc("performance.sessions"))
+                stat(title: loc("performance.focus"), value: timeSummary(minutes: store.todaysFocusedMinutes))
+                stat(title: loc("performance.tracked"), value: timeSummary(seconds: store.todaysActiveSeconds))
             }
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
-                    Text("Day")
+                    Text(loc("history.day"))
                         .frame(width: 34, alignment: .leading)
-                    Text("Pomodoros")
+                    Text(loc("history.pomodoros"))
                     Spacer()
-                    Text("Focus")
+                    Text(loc("performance.focus"))
                         .frame(width: 48, alignment: .trailing)
-                    Text("Active")
+                    Text(loc("history.active"))
                         .frame(width: 48, alignment: .trailing)
                 }
                 .font(.caption2.weight(.semibold))
@@ -198,7 +191,7 @@ struct PomodoroView: View {
                 Button {
                     showsExpandedHistory.toggle()
                 } label: {
-                    Label(showsExpandedHistory ? "Disable scroll" : "Enable scroll", systemImage: showsExpandedHistory ? "chevron.up" : "chevron.down")
+                    Label(showsExpandedHistory ? loc("history.disableScroll") : loc("history.enableScroll"), systemImage: showsExpandedHistory ? "chevron.up" : "chevron.down")
                 }
                 .buttonStyle(.plain)
                 .font(.caption.weight(.semibold))
@@ -210,7 +203,7 @@ struct PomodoroView: View {
     private var dailyActivities: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Activities")
+                Text(loc("activities.title"))
                     .font(.headline)
                 Spacer()
                 Button {
@@ -234,7 +227,7 @@ struct PomodoroView: View {
 
             if showsDailyActivitySetup {
                 HStack(spacing: 8) {
-                    TextField("New activity", text: $newActivityTitle)
+                    TextField(loc("activities.new"), text: $newActivityTitle)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit(addDailyActivity)
 
@@ -248,7 +241,7 @@ struct PomodoroView: View {
             }
 
             if store.state.dailyActivities.isEmpty {
-                Text("No daily activities yet.")
+                Text(loc("activities.empty"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if showsActivities {
@@ -265,12 +258,12 @@ struct PomodoroView: View {
 
     private var footer: some View {
         HStack {
-            Text("History is saved locally.")
+            Text(loc("footer.history"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
             timeFormatMenu
-            Button("Quit") {
+            Button(loc("footer.quit")) {
                 NSApplication.shared.terminate(nil)
             }
             .buttonStyle(.plain)
@@ -306,12 +299,25 @@ struct PomodoroView: View {
                     store.updateTimeDisplayFormat(format)
                 } label: {
                     Label(
-                        format.title,
-                        systemImage: store.state.settings.timeDisplayFormat == format ? "checkmark" : ""
-                    )
-                }
-            }
-        } label: {
+                                timeDisplayTitle(for: format),
+                                systemImage: store.state.settings.timeDisplayFormat == format ? "checkmark" : ""
+                            )
+                        }
+                    }
+                    Divider()
+                    Menu("Language") {
+                        ForEach(AppLanguagePreference.allCases) { language in
+                            Button {
+                                store.updateAppLanguage(language)
+                            } label: {
+                                Label(
+                                    language.title,
+                                    systemImage: store.state.settings.appLanguage == language ? "checkmark" : ""
+                                )
+                            }
+                        }
+                    }
+                } label: {
             Image(systemName: "gearshape")
                 .accessibilityLabel("Settings")
         }
@@ -336,7 +342,7 @@ struct PomodoroView: View {
     }
 
     private var breakLabel: String {
-        store.state.settings.breakMinutes == 0 ? "none" : timeSummary(minutes: store.state.settings.breakMinutes)
+        store.state.settings.breakMinutes == 0 ? loc("settings.none") : timeSummary(minutes: store.state.settings.breakMinutes)
     }
 
     private var compactActivitiesOverview: some View {
@@ -380,7 +386,7 @@ struct PomodoroView: View {
                         startEditing(activity)
                     }
                 } label: {
-                    Text(isEditing ? "Save" : "Edit")
+                    Text(isEditing ? loc("activities.save") : loc("activities.edit"))
                 }
                 .buttonStyle(.plain)
                 .font(.caption.weight(.semibold))
@@ -415,7 +421,7 @@ struct PomodoroView: View {
 
             HStack(alignment: .bottom, spacing: 10) {
                 valueStepper(
-                    title: "Completed",
+                    title: loc("activities.completed"),
                     value: "\(count)",
                     valueWidth: 34,
                     binding: dailyActivityCountBinding(for: activity),
@@ -424,7 +430,7 @@ struct PomodoroView: View {
                 )
 
                 valueStepper(
-                    title: "Target",
+                    title: loc("activities.target"),
                     value: "\(target)",
                     valueWidth: 34,
                     binding: dailyActivityTargetBinding(for: activity),
@@ -458,7 +464,7 @@ struct PomodoroView: View {
 
                 if editingActivityDraft?.reminderEnabled ?? currentDailyActivity(activity).reminderEnabled {
                     valueStepper(
-                        title: "Start",
+                        title: loc("activities.start"),
                         value: formattedMinuteOfDay(editingActivityDraft?.reminderStartMinutes ?? currentDailyActivity(activity).reminderStartMinutes),
                         valueWidth: 48,
                         binding: dailyActivityReminderStartBinding(for: activity),
@@ -467,7 +473,7 @@ struct PomodoroView: View {
                     )
 
                     valueStepper(
-                        title: "Stop",
+                        title: loc("activities.stop"),
                         value: formattedMinuteOfDay(editingActivityDraft?.reminderStopMinutes ?? currentDailyActivity(activity).reminderStopMinutes),
                         valueWidth: 48,
                         binding: dailyActivityReminderStopBinding(for: activity),
@@ -476,7 +482,7 @@ struct PomodoroView: View {
                     )
 
                     valueStepper(
-                        title: "Int.",
+                        title: loc("activities.interval.short"),
                         value: "\(editingActivityDraft?.reminderIntervalMinutes ?? currentDailyActivity(activity).reminderIntervalMinutes)m",
                         valueWidth: 40,
                         binding: dailyActivityReminderIntervalBinding(for: activity),
@@ -704,11 +710,11 @@ struct PomodoroView: View {
 
     private var awayTimeOptions: [AwayTimeOption] {
         [
-            AwayTimeOption(title: "30 seconds", seconds: 30),
-            AwayTimeOption(title: "2 minutes", seconds: 120),
-            AwayTimeOption(title: "5 minutes", seconds: 300),
-            AwayTimeOption(title: "15 minutes", seconds: 900),
-            AwayTimeOption(title: "Indefinite", seconds: nil)
+            AwayTimeOption(title: loc("away.30s"), seconds: 30),
+            AwayTimeOption(title: loc("away.2m"), seconds: 120),
+            AwayTimeOption(title: loc("away.5m"), seconds: 300),
+            AwayTimeOption(title: loc("away.15m"), seconds: 900),
+            AwayTimeOption(title: loc("away.indefinite"), seconds: nil)
         ]
     }
 
@@ -718,6 +724,7 @@ struct PomodoroView: View {
 
     private func dayLabel(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = store.appLocale
         formatter.dateFormat = "E"
         return formatter.string(from: date)
     }
@@ -732,6 +739,36 @@ struct PomodoroView: View {
 
     private func timerText(seconds: Int) -> String {
         PomodoroStore.timerFormat(seconds: seconds, format: store.state.settings.timeDisplayFormat)
+    }
+
+    private var headerDateString: String {
+        let formatter = DateFormatter()
+        formatter.locale = store.appLocale
+        formatter.dateStyle = .full
+        formatter.timeStyle = .medium
+        return formatter.string(from: store.currentTime)
+    }
+
+    private var phaseTitle: String {
+        switch store.phase {
+        case .focus:
+            loc("phase.focus")
+        case .breakTime:
+            loc("phase.break")
+        }
+    }
+
+    private func timeDisplayTitle(for format: TimeDisplayFormat) -> String {
+        switch format {
+        case .allMinutes:
+            loc("settings.time.allMinutes")
+        case .withHours:
+            loc("settings.time.withHours")
+        }
+    }
+
+    private func loc(_ key: String) -> String {
+        store.localized(key)
     }
 
     private func addDailyActivity() {

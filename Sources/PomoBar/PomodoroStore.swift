@@ -173,6 +173,22 @@ final class PomodoroStore: ObservableObject {
         state.settings.timeDisplayFormat = format
     }
 
+    func updateAppLanguage(_ language: AppLanguagePreference) {
+        state.settings.appLanguage = language
+    }
+
+    var appLocale: Locale {
+        state.settings.appLanguage.locale
+    }
+
+    func localized(_ key: String) -> String {
+        L10n.string(key, language: state.settings.appLanguage)
+    }
+
+    func localized(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: localized(key), locale: appLocale, arguments: arguments)
+    }
+
     func addDailyActivity(title: String) {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }

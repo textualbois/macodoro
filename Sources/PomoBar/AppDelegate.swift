@@ -63,11 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         let alert = NSAlert()
-        alert.messageText = "Current streak is over"
-        alert.informativeText = "Nice work. Start a new focus streak now or take your configured break."
+        alert.messageText = store.localized("alert.focus.title")
+        alert.informativeText = store.localized("alert.focus.message")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Start New Streak")
-        alert.addButton(withTitle: store.state.settings.breakMinutes == 0 ? "Later" : "Start Break")
+        alert.addButton(withTitle: store.localized("alert.focus.startNew"))
+        alert.addButton(withTitle: store.state.settings.breakMinutes == 0 ? store.localized("alert.later") : store.localized("alert.focus.startBreak"))
 
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
@@ -84,11 +84,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let target = max(activity.targetCount, 1)
         let alert = NSAlert()
         alert.messageText = activity.title
-        alert.informativeText = "Daily activity progress: \(count)/\(target)"
+        alert.informativeText = store.localized("alert.activity.progress", count, target)
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Done")
-        alert.addButton(withTitle: "Stop Reminding")
-        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: store.localized("alert.activity.done"))
+        alert.addButton(withTitle: store.localized("alert.activity.stopReminding"))
+        alert.addButton(withTitle: store.localized("alert.later"))
 
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {

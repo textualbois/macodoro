@@ -16,21 +16,25 @@ struct PomodoroSettings: Codable, Equatable {
     var focusMinutes: Int = 25
     var breakMinutes: Int = 5
     var timeDisplayFormat: TimeDisplayFormat = .withHours
+    var appLanguage: AppLanguagePreference = .macOS
 
     enum CodingKeys: String, CodingKey {
         case focusMinutes
         case breakMinutes
         case timeDisplayFormat
+        case appLanguage
     }
 
     init(
         focusMinutes: Int = 25,
         breakMinutes: Int = 5,
-        timeDisplayFormat: TimeDisplayFormat = .withHours
+        timeDisplayFormat: TimeDisplayFormat = .withHours,
+        appLanguage: AppLanguagePreference = .macOS
     ) {
         self.focusMinutes = focusMinutes
         self.breakMinutes = breakMinutes
         self.timeDisplayFormat = timeDisplayFormat
+        self.appLanguage = appLanguage
     }
 
     init(from decoder: Decoder) throws {
@@ -38,6 +42,34 @@ struct PomodoroSettings: Codable, Equatable {
         focusMinutes = try container.decodeIfPresent(Int.self, forKey: .focusMinutes) ?? 25
         breakMinutes = try container.decodeIfPresent(Int.self, forKey: .breakMinutes) ?? 5
         timeDisplayFormat = try container.decodeIfPresent(TimeDisplayFormat.self, forKey: .timeDisplayFormat) ?? .withHours
+        appLanguage = try container.decodeIfPresent(AppLanguagePreference.self, forKey: .appLanguage) ?? .macOS
+    }
+}
+
+enum AppLanguagePreference: String, Codable, CaseIterable, Identifiable {
+    case macOS
+    case russian
+    case english
+    case german
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .macOS: "macOS"
+        case .russian: "Russian"
+        case .english: "English"
+        case .german: "German"
+        }
+    }
+
+    var locale: Locale {
+        switch self {
+        case .macOS: .autoupdatingCurrent
+        case .russian: Locale(identifier: "ru")
+        case .english: Locale(identifier: "en")
+        case .german: Locale(identifier: "de")
+        }
     }
 }
 
