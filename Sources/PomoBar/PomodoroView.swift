@@ -3,6 +3,8 @@ import SwiftUI
 struct PomodoroView: View {
     @ObservedObject var store: PomodoroStore
     @State private var showsExpandedHistory = false
+    @State private var showsActivities = false
+    @State private var showsDailyActivitySetup = false
     @State private var newActivityTitle = ""
 
     private let dateFormatter: DateFormatter = {
@@ -205,32 +207,54 @@ struct PomodoroView: View {
 
     private var dailyActivities: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Daily Activities")
-                .font(.headline)
-
-            HStack(spacing: 8) {
-                TextField("New activity", text: $newActivityTitle)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addDailyActivity)
-
-                Button(action: addDailyActivity) {
-                    Image(systemName: "plus")
-                        .accessibilityLabel("Add activity")
+            HStack {
+                Text("Activities")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showsActivities.toggle()
+                } label: {
+                    Text(showsActivities ? "Hide" : "Show")
                 }
-                .buttonStyle(.bordered)
-                .disabled(newActivityTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                Button {
+                    showsDailyActivitySetup.toggle()
+                } label: {
+                    Text(showsDailyActivitySetup ? "Cancel" : "Add")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+
+            if showsDailyActivitySetup {
+                HStack(spacing: 8) {
+                    TextField("New activity", text: $newActivityTitle)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(addDailyActivity)
+
+                    Button(action: addDailyActivity) {
+                        Image(systemName: "plus")
+                            .accessibilityLabel("Add activity")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(newActivityTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
 
             if store.state.dailyActivities.isEmpty {
                 Text("No daily activities yet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
+            } else if showsActivities {
                 VStack(spacing: 8) {
                     ForEach(store.state.dailyActivities) { activity in
                         dailyActivityRow(activity)
                     }
                 }
+            } else {
+                compactActivitiesOverview
             }
         }
     }
@@ -311,6 +335,25 @@ struct PomodoroView: View {
         store.state.settings.breakMinutes == 0 ? "none" : timeSummary(minutes: store.state.settings.breakMinutes)
     }
 
+    private var compactActivitiesOverview: some View {
+        let count = store.state.dailyActivities.reduce(0) { total, activity in
+            total + min(store.dailyActivityCount(for: activity), max(activity.targetCount, 1))
+        }
+        let target = store.state.dailyActivities.reduce(0) { total, activity in
+            total + max(activity.targetCount, 1)
+        }
+
+        return HStack(spacing: 8) {
+            ActivityCompletionMarks(count: count, target: target)
+            Spacer()
+            Text("\(count)/\(target)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(count >= target ? .green : .secondary)
+                .frame(width: 42, alignment: .trailing)
+        }
+        .frame(height: 24)
+    }
+
     private func dailyActivityRow(_ activity: DailyActivity) -> some View {
         let count = store.dailyActivityCount(for: activity)
         let target = max(activity.targetCount, 1)
@@ -378,30 +421,26 @@ struct PomodoroView: View {
 
                 if currentDailyActivity(activity).reminderEnabled {
                     HStack(spacing: 6) {
-                        DatePicker(
-                            "From",
-                            selection: dailyActivityReminderStartBinding(for: activity),
-                            displayedComponents: .hourAndMinute
+                        reminderTimeField(
+                            title: "Start",
+                            selection: dailyActivityReminderStartBinding(for: activity)
                         )
-                        .labelsHidden()
+
+                        reminderTimeField(
+                            title: "Stop",
+                            selection: dailyActivityReminderStopBinding(for: activity)
+                        )
 
                         Stepper(
                             value: dailyActivityReminderIntervalBinding(for: activity),
                             in: 5...240,
                             step: 5
                         ) {
-                            Text("Every \(currentDailyActivity(activity).reminderIntervalMinutes)m")
+                            Text("Interval \(currentDailyActivity(activity).reminderIntervalMinutes)m")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                                .frame(width: 72, alignment: .leading)
+                                .frame(width: 86, alignment: .leading)
                         }
-
-                        DatePicker(
-                            "Until",
-                            selection: dailyActivityReminderStopBinding(for: activity),
-                            displayedComponents: .hourAndMinute
-                        )
-                        .labelsHidden()
                     }
                 }
             }
@@ -420,6 +459,16 @@ struct PomodoroView: View {
                 store.updateDailyActivityTarget(activity, targetCount: $0)
             }
         )
+    }
+
+    private func reminderTimeField(title: String, selection: Binding<Date>) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            DatePicker(title, selection: selection, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+        }
     }
 
     private func dailyActivityReminderEnabledBinding(for activity: DailyActivity) -> Binding<Bool> {
@@ -571,6 +620,7 @@ struct PomodoroView: View {
     private func addDailyActivity() {
         store.addDailyActivity(title: newActivityTitle)
         newActivityTitle = ""
+        showsDailyActivitySetup = false
     }
 }
 
@@ -605,6 +655,74 @@ struct TallyMarks: View {
         let end = min(start + 5, count)
         guard start < end else { return [] }
         return Array(sessions[start..<end])
+    }
+}
+
+struct ActivityCompletionMarks: View {
+    let count: Int
+    let target: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<groupCount, id: \.self) { groupIndex in
+                ActivityTallyGroup(
+                    targetCount: targetCount(in: groupIndex),
+                    filledCount: filledCount(in: groupIndex)
+                )
+            }
+        }
+        .accessibilityLabel("\(count) of \(target) completed")
+    }
+
+    private var totalCount: Int {
+        max(target, 1)
+    }
+
+    private var groupCount: Int {
+        max(Int(ceil(Double(totalCount) / 5.0)), 1)
+    }
+
+    private func targetCount(in groupIndex: Int) -> Int {
+        let remaining = totalCount - (groupIndex * 5)
+        return min(max(remaining, 0), 5)
+    }
+
+    private func filledCount(in groupIndex: Int) -> Int {
+        let remaining = min(max(count, 0), totalCount) - (groupIndex * 5)
+        return min(max(remaining, 0), 5)
+    }
+}
+
+struct ActivityTallyGroup: View {
+    let targetCount: Int
+    let filledCount: Int
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 2) {
+                ForEach(0..<verticalMarkCount, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(markColor(for: index))
+                        .frame(width: 3, height: 16)
+                }
+            }
+
+            if targetCount == 5 {
+                Rectangle()
+                    .fill(markColor(for: 4))
+                    .frame(width: 26, height: 3)
+                    .rotationEffect(.degrees(-22))
+            }
+        }
+        .frame(width: 28, height: 18, alignment: .leading)
+    }
+
+    private var verticalMarkCount: Int {
+        min(targetCount, 4)
+    }
+
+    private func markColor(for index: Int) -> Color {
+        index < filledCount ? .green : .secondary.opacity(0.18)
     }
 }
 
