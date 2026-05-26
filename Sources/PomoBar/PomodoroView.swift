@@ -5,6 +5,8 @@ struct PomodoroView: View {
     @State private var showsExpandedHistory = false
     @State private var showsActivities = false
     @State private var showsDailyActivitySetup = false
+    @State private var editingActivityID: DailyActivity.ID?
+    @State private var editingActivityDraft: DailyActivityDraft?
     @State private var newActivityTitle = ""
 
     private let dateFormatter: DateFormatter = {
@@ -214,7 +216,8 @@ struct PomodoroView: View {
                 Button {
                     showsActivities.toggle()
                 } label: {
-                    Text(showsActivities ? "Hide" : "Show")
+                    Image(systemName: showsActivities ? "eye.slash" : "eye")
+                        .accessibilityLabel(showsActivities ? "Hide activities" : "Show activities")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -222,7 +225,8 @@ struct PomodoroView: View {
                 Button {
                     showsDailyActivitySetup.toggle()
                 } label: {
-                    Text(showsDailyActivitySetup ? "Cancel" : "Add")
+                    Image(systemName: showsDailyActivitySetup ? "xmark" : "plus")
+                        .accessibilityLabel(showsDailyActivitySetup ? "Cancel adding activity" : "Add activity")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -357,7 +361,7 @@ struct PomodoroView: View {
     private func dailyActivityRow(_ activity: DailyActivity) -> some View {
         let count = store.dailyActivityCount(for: activity)
         let target = max(activity.targetCount, 1)
-        let progress = min(Double(count) / Double(target), 1)
+        let isEditing = editingActivityID == activity.id
 
         return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
@@ -369,39 +373,70 @@ struct PomodoroView: View {
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(count >= target ? .green : .secondary)
                     .frame(width: 42, alignment: .trailing)
+                Button {
+                    if isEditing {
+                        saveDailyActivityDraft(for: activity)
+                    } else {
+                        startEditing(activity)
+                    }
+                } label: {
+                    Text(isEditing ? "Save" : "Edit")
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                if isEditing {
+                    Button {
+                        cancelEditingActivity()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .accessibilityLabel("Cancel editing")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
             }
 
-            HStack(spacing: 8) {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
+            if isEditing {
+                dailyActivityEditor(activity)
+            }
+        }
+        .padding(8)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
 
-                Button {
-                    store.decrementDailyActivity(activity)
-                } label: {
-                    Image(systemName: "minus")
-                        .accessibilityLabel("Decrease")
-                }
-                .buttonStyle(.borderless)
-                .disabled(count == 0)
+    private func dailyActivityEditor(_ activity: DailyActivity) -> some View {
+        let count = editingActivityDraft?.count ?? store.dailyActivityCount(for: activity)
+        let target = editingActivityDraft?.targetCount ?? currentDailyActivity(activity).targetCount
 
-                Button {
-                    store.incrementDailyActivity(activity)
-                } label: {
-                    Image(systemName: "plus")
-                        .accessibilityLabel("Increase")
-                }
-                .buttonStyle(.borderless)
+        return VStack(alignment: .leading, spacing: 8) {
+            Divider()
 
-                Stepper(
-                    value: dailyActivityTargetBinding(for: activity),
-                    in: 1...20
-                ) {
-                    EmptyView()
-                }
-                .labelsHidden()
+            HStack(alignment: .bottom, spacing: 10) {
+                valueStepper(
+                    title: "Completed",
+                    value: "\(count)",
+                    valueWidth: 34,
+                    binding: dailyActivityCountBinding(for: activity),
+                    range: 0...max(target, 1),
+                    step: 1
+                )
+
+                valueStepper(
+                    title: "Target",
+                    value: "\(target)",
+                    valueWidth: 34,
+                    binding: dailyActivityTargetBinding(for: activity),
+                    range: 1...20,
+                    step: 1
+                )
+
+                Spacer()
 
                 Button {
                     store.removeDailyActivity(activity)
+                    cancelEditingActivity()
                 } label: {
                     Image(systemName: "trash")
                         .accessibilityLabel("Remove")
@@ -410,85 +445,133 @@ struct PomodoroView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Divider()
+            HStack(alignment: .bottom, spacing: 8) {
+                Image(systemName: "bell")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 18, height: 28)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(isOn: dailyActivityReminderEnabledBinding(for: activity)) {
-                    Label("Remind", systemImage: "bell")
-                        .font(.caption.weight(.medium))
-                }
-                .toggleStyle(.switch)
+                Toggle("Reminders", isOn: dailyActivityReminderEnabledBinding(for: activity))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
 
-                if currentDailyActivity(activity).reminderEnabled {
-                    HStack(spacing: 6) {
-                        reminderTimeField(
-                            title: "Start",
-                            selection: dailyActivityReminderStartBinding(for: activity)
-                        )
+                if editingActivityDraft?.reminderEnabled ?? currentDailyActivity(activity).reminderEnabled {
+                    valueStepper(
+                        title: "Start",
+                        value: formattedMinuteOfDay(editingActivityDraft?.reminderStartMinutes ?? currentDailyActivity(activity).reminderStartMinutes),
+                        valueWidth: 48,
+                        binding: dailyActivityReminderStartBinding(for: activity),
+                        range: 0...1439,
+                        step: 15
+                    )
 
-                        reminderTimeField(
-                            title: "Stop",
-                            selection: dailyActivityReminderStopBinding(for: activity)
-                        )
+                    valueStepper(
+                        title: "Stop",
+                        value: formattedMinuteOfDay(editingActivityDraft?.reminderStopMinutes ?? currentDailyActivity(activity).reminderStopMinutes),
+                        valueWidth: 48,
+                        binding: dailyActivityReminderStopBinding(for: activity),
+                        range: 0...1439,
+                        step: 15
+                    )
 
-                        Stepper(
-                            value: dailyActivityReminderIntervalBinding(for: activity),
-                            in: 5...240,
-                            step: 5
-                        ) {
-                            Text("Interval \(currentDailyActivity(activity).reminderIntervalMinutes)m")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .frame(width: 86, alignment: .leading)
-                        }
-                    }
+                    valueStepper(
+                        title: "Int.",
+                        value: "\(editingActivityDraft?.reminderIntervalMinutes ?? currentDailyActivity(activity).reminderIntervalMinutes)m",
+                        valueWidth: 40,
+                        binding: dailyActivityReminderIntervalBinding(for: activity),
+                        range: 5...240,
+                        step: 5
+                    )
                 }
             }
         }
-        .padding(8)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func dailyActivityCountBinding(for activity: DailyActivity) -> Binding<Int> {
+        Binding(
+            get: {
+                editingActivityDraft?.count ?? store.dailyActivityCount(for: activity)
+            },
+            set: {
+                let target = editingActivityDraft?.targetCount ?? currentDailyActivity(activity).targetCount
+                let count = min(max($0, 0), max(target, 1))
+                updateEditingActivityDraft {
+                    $0.count = count
+                }
+            }
+        )
     }
 
     private func dailyActivityTargetBinding(for activity: DailyActivity) -> Binding<Int> {
         Binding(
             get: {
-                store.state.dailyActivities.first(where: { $0.id == activity.id })?.targetCount ?? activity.targetCount
+                editingActivityDraft?.targetCount ?? currentDailyActivity(activity).targetCount
             },
             set: {
-                store.updateDailyActivityTarget(activity, targetCount: $0)
+                let targetCount = min(max($0, 1), 20)
+                updateEditingActivityDraft {
+                    $0.targetCount = targetCount
+                    $0.count = min($0.count, targetCount)
+                }
             }
         )
     }
 
-    private func reminderTimeField(title: String, selection: Binding<Date>) -> some View {
-        HStack(spacing: 3) {
+    private func valueStepper(
+        title: String,
+        value: String,
+        valueWidth: CGFloat,
+        binding: Binding<Int>,
+        range: ClosedRange<Int>,
+        step: Int
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-            DatePicker(title, selection: selection, displayedComponents: .hourAndMinute)
+
+            HStack(alignment: .center, spacing: 0) {
+                Text(value)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: valueWidth, height: 28)
+                    .background(Color(nsColor: .controlColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                Stepper(value: binding, in: range, step: step) {
+                    EmptyView()
+                }
                 .labelsHidden()
+            }
         }
     }
 
     private func dailyActivityReminderEnabledBinding(for activity: DailyActivity) -> Binding<Bool> {
         Binding(
             get: {
-                currentDailyActivity(activity).reminderEnabled
+                editingActivityDraft?.reminderEnabled ?? currentDailyActivity(activity).reminderEnabled
             },
-            set: {
-                store.updateDailyActivityReminderEnabled(activity, isEnabled: $0)
+            set: { isEnabled in
+                updateEditingActivityDraft {
+                    $0.reminderEnabled = isEnabled
+                }
             }
         )
     }
 
-    private func dailyActivityReminderStartBinding(for activity: DailyActivity) -> Binding<Date> {
+    private func dailyActivityReminderStartBinding(for activity: DailyActivity) -> Binding<Int> {
         Binding(
             get: {
-                dateForMinuteOfDay(currentDailyActivity(activity).reminderStartMinutes)
+                editingActivityDraft?.reminderStartMinutes ?? currentDailyActivity(activity).reminderStartMinutes
             },
             set: {
-                store.updateDailyActivityReminderStart(activity, minutes: minuteOfDay(for: $0))
+                let minutes = min(max($0, 0), 1439)
+                updateEditingActivityDraft {
+                    $0.reminderStartMinutes = minutes
+                }
             }
         )
     }
@@ -496,21 +579,27 @@ struct PomodoroView: View {
     private func dailyActivityReminderIntervalBinding(for activity: DailyActivity) -> Binding<Int> {
         Binding(
             get: {
-                currentDailyActivity(activity).reminderIntervalMinutes
+                editingActivityDraft?.reminderIntervalMinutes ?? currentDailyActivity(activity).reminderIntervalMinutes
             },
             set: {
-                store.updateDailyActivityReminderInterval(activity, minutes: $0)
+                let minutes = min(max($0, 5), 240)
+                updateEditingActivityDraft {
+                    $0.reminderIntervalMinutes = minutes
+                }
             }
         )
     }
 
-    private func dailyActivityReminderStopBinding(for activity: DailyActivity) -> Binding<Date> {
+    private func dailyActivityReminderStopBinding(for activity: DailyActivity) -> Binding<Int> {
         Binding(
             get: {
-                dateForMinuteOfDay(currentDailyActivity(activity).reminderStopMinutes)
+                editingActivityDraft?.reminderStopMinutes ?? currentDailyActivity(activity).reminderStopMinutes
             },
             set: {
-                store.updateDailyActivityReminderStop(activity, minutes: minuteOfDay(for: $0))
+                let minutes = min(max($0, 0), 1439)
+                updateEditingActivityDraft {
+                    $0.reminderStopMinutes = minutes
+                }
             }
         )
     }
@@ -519,21 +608,49 @@ struct PomodoroView: View {
         store.state.dailyActivities.first(where: { $0.id == activity.id }) ?? activity
     }
 
-    private func dateForMinuteOfDay(_ minuteOfDay: Int) -> Date {
+    private func formattedMinuteOfDay(_ minuteOfDay: Int) -> String {
         let clampedMinute = min(max(minuteOfDay, 0), (24 * 60) - 1)
         let hour = clampedMinute / 60
         let minute = clampedMinute % 60
-        return Calendar.autoupdatingCurrent.date(
-            bySettingHour: hour,
-            minute: minute,
-            second: 0,
-            of: store.currentTime
-        ) ?? store.currentTime
+        return String(format: "%02d:%02d", hour, minute)
+    }
+    private func startEditing(_ activity: DailyActivity) {
+        let currentActivity = currentDailyActivity(activity)
+        editingActivityID = activity.id
+        editingActivityDraft = DailyActivityDraft(
+            count: store.dailyActivityCount(for: activity),
+            targetCount: max(currentActivity.targetCount, 1),
+            reminderEnabled: currentActivity.reminderEnabled,
+            reminderStartMinutes: currentActivity.reminderStartMinutes,
+            reminderIntervalMinutes: currentActivity.reminderIntervalMinutes,
+            reminderStopMinutes: currentActivity.reminderStopMinutes
+        )
     }
 
-    private func minuteOfDay(for date: Date) -> Int {
-        let components = Calendar.autoupdatingCurrent.dateComponents([.hour, .minute], from: date)
-        return ((components.hour ?? 0) * 60) + (components.minute ?? 0)
+    private func cancelEditingActivity() {
+        editingActivityID = nil
+        editingActivityDraft = nil
+    }
+
+    private func saveDailyActivityDraft(for activity: DailyActivity) {
+        guard let draft = editingActivityDraft else {
+            cancelEditingActivity()
+            return
+        }
+
+        store.updateDailyActivityCount(activity, count: draft.count)
+        store.updateDailyActivityTarget(activity, targetCount: draft.targetCount)
+        store.updateDailyActivityReminderEnabled(activity, isEnabled: draft.reminderEnabled)
+        store.updateDailyActivityReminderStart(activity, minutes: draft.reminderStartMinutes)
+        store.updateDailyActivityReminderInterval(activity, minutes: draft.reminderIntervalMinutes)
+        store.updateDailyActivityReminderStop(activity, minutes: draft.reminderStopMinutes)
+        cancelEditingActivity()
+    }
+
+    private func updateEditingActivityDraft(_ update: (inout DailyActivityDraft) -> Void) {
+        guard var draft = editingActivityDraft else { return }
+        update(&draft)
+        editingActivityDraft = draft
     }
 
     private var trackMenuApps: [TrackedApp] {
@@ -776,4 +893,13 @@ private struct AwayTimeOption: Identifiable {
     var id: String { seconds.map(String.init) ?? "indefinite" }
     let title: String
     let seconds: Int?
+}
+
+private struct DailyActivityDraft {
+    var count: Int
+    var targetCount: Int
+    var reminderEnabled: Bool
+    var reminderStartMinutes: Int
+    var reminderIntervalMinutes: Int
+    var reminderStopMinutes: Int
 }

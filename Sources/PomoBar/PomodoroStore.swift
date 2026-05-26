@@ -198,6 +198,10 @@ final class PomodoroStore: ObservableObject {
         }?.count ?? 0
     }
 
+    func updateDailyActivityCount(_ activity: DailyActivity, count: Int) {
+        setDailyActivityCount(for: activity, count: count)
+    }
+
     func incrementDailyActivity(_ activity: DailyActivity) {
         updateDailyActivityCount(for: activity, by: 1)
     }
