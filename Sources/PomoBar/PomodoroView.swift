@@ -365,9 +365,9 @@ struct PomodoroView: View {
     }
 
     private func dailyActivityRow(_ activity: DailyActivity) -> some View {
-        let count = store.dailyActivityCount(for: activity)
-        let target = max(activity.targetCount, 1)
         let isEditing = editingActivityID == activity.id
+        let count = isEditing ? editingActivityDraft?.count ?? store.dailyActivityCount(for: activity) : store.dailyActivityCount(for: activity)
+        let target = isEditing ? editingActivityDraft?.targetCount ?? max(activity.targetCount, 1) : max(activity.targetCount, 1)
 
         return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
@@ -379,6 +379,17 @@ struct PomodoroView: View {
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(count >= target ? .green : .secondary)
                     .frame(width: 42, alignment: .trailing)
+                Button {
+                    incrementVisibleDailyActivity(activity, count: count, target: target, isEditing: isEditing)
+                } label: {
+                    Image(systemName: "plus")
+                        .accessibilityLabel("Add completed activity")
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(count >= target ? .tertiary : .secondary)
+                .frame(width: 18, height: 18)
+                .disabled(count >= target)
                 Button {
                     if isEditing {
                         saveDailyActivityDraft(for: activity)
@@ -410,6 +421,17 @@ struct PomodoroView: View {
         .padding(8)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func incrementVisibleDailyActivity(_ activity: DailyActivity, count: Int, target: Int, isEditing: Bool) {
+        let newCount = min(count + 1, max(target, 1))
+        if isEditing {
+            updateEditingActivityDraft {
+                $0.count = newCount
+            }
+        } else {
+            store.updateDailyActivityCount(activity, count: newCount)
+        }
     }
 
     private func dailyActivityEditor(_ activity: DailyActivity) -> some View {
